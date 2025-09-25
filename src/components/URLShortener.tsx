@@ -69,9 +69,14 @@ const URLShortener = () => {
       const data = await response.json();
       console.log('Webhook response:', data);
       
-      // Display the actual webhook response
-      const responseText = JSON.stringify(data, null, 2);
-      setShortUrl(responseText);
+      // Extract the short URL from webhook response
+      const generatedShortUrl = data.short_url || data.shortUrl || data.shortened_url || data.url;
+      
+      if (!generatedShortUrl) {
+        throw new Error('No short URL received');
+      }
+
+      setShortUrl(generatedShortUrl);
 
       // Success confetti
       setTimeout(() => {
