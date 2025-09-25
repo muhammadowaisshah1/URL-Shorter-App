@@ -1,32 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Zap } from 'lucide-react';
+import { useState } from 'react';
+import { Zap, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import UserMessage from './UserMessage';
-import BotMessage from './BotMessage';
-import TypingIndicator from './TypingIndicator';
+import { toast } from '@/hooks/use-toast';
 import confetti from 'canvas-confetti';
-
-interface Message {
-  id: string;
-  type: 'user' | 'bot' | 'typing';
-  content: string;
-  isError?: boolean;
-}
 
 const URLShortener = () => {
   const [url, setUrl] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [shortUrl, setShortUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const [copied, setCopied] = useState(false);
 
   const isValidUrl = (string: string) => {
     try {
@@ -37,37 +20,38 @@ const URLShortener = () => {
     }
   };
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(shortUrl);
+      setCopied(true);
+      toast({
+        title: "Copied!",
+        description: "Short URL copied to clipboard",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Copy failed",
+        description: "Please copy the URL manually",
+        variant: "destructive",
+      });
+    }
+  };
+
   const shortenUrl = async () => {
     if (!url.trim()) return;
     
     if (!isValidUrl(url)) {
-      setMessages(prev => [
-        ...prev,
-        { id: Date.now().toString(), type: 'user', content: url },
-        { id: (Date.now() + 1).toString(), type: 'bot', content: 'Please enter a valid URL (including http:// or https://)', isError: true }
-      ]);
-      setUrl('');
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid URL (including http:// or https://)",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsLoading(true);
-    
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: url
-    };
-    
-    // Add typing indicator
-    const typingMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'typing',
-      content: ''
-    };
-    
-    setMessages(prev => [...prev, userMessage, typingMessage]);
-    setUrl('');
+    setShortUrl('');
 
     try {
       const response = await fetch('https://muhammadowais12.app.n8n.cloud/webhook-test/shorten-url', {
@@ -83,23 +67,15 @@ const URLShortener = () => {
       }
 
       const data = await response.json();
-      const shortUrl = data.shortUrl || data.shortened_url || data.url;
+      const generatedShortUrl = data.shortUrl || data.shortened_url || data.url;
       
-      if (!shortUrl) {
+      if (!generatedShortUrl) {
         throw new Error('No short URL received');
       }
 
-      // Remove typing indicator and add bot response
-      setMessages(prev => {
-        const withoutTyping = prev.filter(msg => msg.type !== 'typing');
-        return [...withoutTyping, {
-          id: Date.now().toString(),
-          type: 'bot',
-          content: shortUrl
-        }];
-      });
+      setShortUrl(generatedShortUrl);
 
-      // Success confetti after a short delay
+      // Success confetti
       setTimeout(() => {
         confetti({
           particleCount: 150,
@@ -111,16 +87,10 @@ const URLShortener = () => {
 
     } catch (error) {
       console.error('Error shortening URL:', error);
-      
-      // Remove typing indicator and add error message
-      setMessages(prev => {
-        const withoutTyping = prev.filter(msg => msg.type !== 'typing');
-        return [...withoutTyping, {
-          id: Date.now().toString(),
-          type: 'bot',
-          content: 'Failed to shorten URL',
-          isError: true
-        }];
+      toast({
+        title: "Error",
+        description: "Failed to shorten URL. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -134,88 +104,128 @@ const URLShortener = () => {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
+  const handleNewUrl = () => {
+    setUrl('');
+    setShortUrl('');
+    setCopied(false);
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border/50 px-4 py-6">
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Zap className="text-primary" size={32} />
-            <h1 className="text-3xl font-bold gradient-text">Tiny URL Generator</h1>
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Zap className="text-primary" size={32} />
+            </div>
           </div>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-4xl font-bold gradient-text mb-2">Tiny URL Generator</h1>
+          <p className="text-muted-foreground text-lg">
             Transform long URLs into short, shareable links instantly
           </p>
         </div>
-      </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Zap className="text-primary" size={24} />
+        {/* Main Card */}
+        <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-8 shadow-xl">
+          {!shortUrl ? (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <label htmlFor="url-input" className="text-sm font-medium text-foreground">
+                    Enter your long URL
+                  </label>
+                  <Input
+                    id="url-input"
+                    type="url"
+                    placeholder="https://example.com/very/long/url..."
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    disabled={isLoading}
+                    className="h-14 text-base bg-background border-border focus:border-primary transition-smooth"
+                  />
+                </div>
+                
+                <Button
+                  type="submit"
+                  disabled={!url.trim() || isLoading}
+                  className="w-full h-14 text-base bg-primary hover:bg-primary/90 text-primary-foreground transition-smooth"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                      Generating...
+                    </div>
+                  ) : (
+                    <>
+                      <Zap size={20} className="mr-2" />
+                      Generate Short URL
+                    </>
+                  )}
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              {/* Success Message */}
+              <div className="text-center mb-8">
+                <div className="text-6xl mb-4">🎉</div>
+                <h2 className="text-2xl font-bold text-foreground mb-2">Congratulations!</h2>
+                <p className="text-muted-foreground">Here is your shortened link:</p>
               </div>
-              <h2 className="text-xl font-semibold mb-2">Ready to shorten URLs!</h2>
-              <p className="text-muted-foreground text-sm">
-                Paste your long URL below and I'll generate a short link for you.
-              </p>
-            </div>
-          </div>
-        )}
-        
-        {messages.map((message) => {
-          if (message.type === 'user') {
-            return <UserMessage key={message.id} url={message.content} />;
-          } else if (message.type === 'bot') {
-            return (
-              <BotMessage 
-                key={message.id} 
-                shortUrl={message.content} 
-                isError={message.isError}
-              />
-            );
-          } else if (message.type === 'typing') {
-            return <TypingIndicator key={message.id} />;
-          }
-          return null;
-        })}
-        
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Input Area */}
-      <div className="sticky bottom-0 bg-background/90 backdrop-blur-sm border-t border-border/50 p-4">
-        <form onSubmit={handleSubmit} className="flex gap-2 max-w-2xl mx-auto">
-          <Input
-            type="url"
-            placeholder="Paste your long URL here..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isLoading}
-            className="flex-1 h-12 text-base bg-card border-input-border focus:border-primary transition-smooth"
-          />
-          <Button
-            type="submit"
-            disabled={!url.trim() || isLoading}
-            className="h-12 px-6 bg-primary hover:bg-primary/90 text-primary-foreground transition-smooth"
-          >
-            <Send size={18} className="mr-2" />
-            Generate
-          </Button>
-        </form>
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Press Enter to generate • Powered by Lovable
-        </p>
+              {/* Generated URL */}
+              <div className="bg-background/50 border border-border rounded-xl p-6 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground mb-1">Short URL:</p>
+                    <p className="text-lg font-mono text-primary break-all">{shortUrl}</p>
+                  </div>
+                  <Button
+                    onClick={copyToClipboard}
+                    variant="outline"
+                    size="lg"
+                    className="shrink-0 h-12 px-4"
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={18} className="mr-2 text-green-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={18} className="mr-2" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Original URL */}
+              <div className="bg-muted/30 rounded-lg p-4 mb-6">
+                <p className="text-xs text-muted-foreground mb-1">Original URL:</p>
+                <p className="text-sm text-foreground break-all">{url}</p>
+              </div>
+
+              {/* New URL Button */}
+              <Button
+                onClick={handleNewUrl}
+                variant="secondary"
+                className="w-full h-12"
+              >
+                Shorten Another URL
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8">
+          <p className="text-xs text-muted-foreground">
+            Powered by Lovable • Fast, secure, and reliable
+          </p>
+        </div>
       </div>
     </div>
   );
