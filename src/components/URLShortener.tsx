@@ -54,7 +54,7 @@ const URLShortener = () => {
     setShortUrl('');
 
     try {
-      const response = await fetch('https://muhammadowais12.app.n8n.cloud/webhook-test/shorten-url', {
+      const response = await fetch('http://localhost:5678/webhook/shorten-url', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
